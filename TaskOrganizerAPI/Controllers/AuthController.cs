@@ -50,7 +50,7 @@ namespace TaskOrganizerAPI.Controllers
             var userFromRepo = await _authRepository.Login(userForLoginDto.Username.ToLower(), userForLoginDto.Password);
 
             if (userFromRepo == null)
-                return Unauthorized();
+                return Unauthorized("Wrong username or password");
 
             //BUILD TOKEN
 

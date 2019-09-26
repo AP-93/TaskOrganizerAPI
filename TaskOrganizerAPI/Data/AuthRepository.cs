@@ -3,13 +3,15 @@ using System.Threading.Tasks;
 using TaskOrganizerAPI.Model;
 
 namespace TaskOrganizerAPI.Data
-{
+{       
+
     public class AuthRepository : IAuthRepository
     {
         private readonly DataContext _dataContext;
         public AuthRepository(DataContext dataContext)
         {
             _dataContext = dataContext;
+           _dataContext.Database.EnsureCreated();
         }
 
         public async Task<User> Login(string username, string password)

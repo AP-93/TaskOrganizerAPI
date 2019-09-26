@@ -3,15 +3,17 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TaskOrganizerAPI.Data;
 
 namespace TaskOrganizerAPI.Migrations
 {
     [DbContext(typeof(DataContext))]
-    partial class DataContextModelSnapshot : ModelSnapshot
+    [Migration("20190730145428_addDataMigration")]
+    partial class addDataMigration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -24,8 +26,6 @@ namespace TaskOrganizerAPI.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasAnnotation("SqlServer:ValueGenerationStrategy", SqlServerValueGenerationStrategy.IdentityColumn);
-
-                    b.Property<int>("OwnerId");
 
                     b.Property<string>("Title");
 
@@ -44,8 +44,6 @@ namespace TaskOrganizerAPI.Migrations
 
                     b.Property<string>("ListName");
 
-                    b.Property<int>("ListPosition");
-
                     b.HasKey("Id");
 
                     b.HasIndex("BoardId");
@@ -60,8 +58,6 @@ namespace TaskOrganizerAPI.Migrations
                         .HasAnnotation("SqlServer:ValueGenerationStrategy", SqlServerValueGenerationStrategy.IdentityColumn);
 
                     b.Property<int>("BoardListId");
-
-                    b.Property<int>("CardPosition");
 
                     b.Property<string>("CardText");
 
