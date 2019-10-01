@@ -45,8 +45,7 @@ namespace TaskOrganizerAPI.Controllers
         [HttpGet("getBoards/{id}")]
         public ActionResult<string> GetBoards(int id)
         {
-
-            var userBoards = _dataContext.Users.Where(x => x.Id == id).SelectMany(x => x.Boards).Select(x => x.Board).Include(l => l.BoardLists).ThenInclude(c => c.Cards).ToList();
+            var userBoards = _dataContext.Users.Where(x => x.Id == id).SelectMany(x => x.Boards).Select(x => x.Board).Include(l => l.BoardLists).ThenInclude(c => c.Cards).ToList();//.OrderBy(crd=>crd.CardPosition)
             foreach (var b in userBoards)
             {
                 b.BoardLists = b.BoardLists.OrderBy(x => x.ListPosition).ToList();
@@ -57,7 +56,6 @@ namespace TaskOrganizerAPI.Controllers
         [HttpGet("getLists/{id}")]
         public ActionResult<string> GetLists(int id)
         {
-            //var boardLists = _dataContext.Boards.Where(x => x.Id == id).SelectMany(x => x.BoardLists).;
             var boardLists = _dataContext.Boards.Include(l => l.BoardLists).ThenInclude(c => c.Cards).FirstOrDefault(x => x.Id == id);
             boardLists.BoardLists.OrderBy(x => x.ListPosition);
             return Ok(boardLists);
@@ -65,8 +63,9 @@ namespace TaskOrganizerAPI.Controllers
         [HttpGet("getCards/{id}")]
         public ActionResult<string> GetCards(int id)
         {
-            var boardLists = _dataContext.Boards.Where(x => x.Id == id).SelectMany(x => x.BoardLists).SelectMany(x => x.Cards);
-            return Ok(boardLists);
+            var cards = _dataContext.Boards.Where(x => x.Id == id).SelectMany(x => x.BoardLists).SelectMany(x => x.Cards).ToList();
+            cards.OrderBy(c => c.CardPosition);
+            return Ok(cards);
         }
 
         [HttpGet("getBoardUsers/{id}")]
@@ -88,20 +87,29 @@ namespace TaskOrganizerAPI.Controllers
 
        //PUT
         [HttpPut("addUserToBoard/{id}")]
-        public async Task addUserToBoard(int id, [FromBody] UserIdAndName value)
+        public async Task<IActionResult> AddUserToBoard(int id, [FromBody] UserIdAndName value)
         {
             var board = await _dataContext.Boards.Include(x=>x.Users).FirstOrDefaultAsync(x => x.Id == id);
             var user = await _dataContext.Users.FirstOrDefaultAsync(x => x.Username== value.Username);
+            var existingUsers = board.Users.Select(u => u.UserId);
+            if (user != null)
+            {
+                foreach(var i in existingUsers)
+                {
+                    if(i == user.Id)
+                      return NotFound("User already added");
+                }
 
-           if (user != null) { 
-            var userBoard = new UserBoard
-            {          
-                Board=board,
-                User=user
-            };
-            board.Users.Add(userBoard);
-            }
-            _dataContext.SaveChanges();
+                var userBoard = new UserBoard
+                {
+                    Board = board,
+                    User = user
+                };
+                board.Users.Add(userBoard);
+                _dataContext.SaveChanges();
+                return Ok();
+            }else
+            return NotFound("User doesent exist");
         }
 
           // PUT api/values/5
@@ -110,6 +118,7 @@ namespace TaskOrganizerAPI.Controllers
         {
             var userBoards =  _dataContext.Users.Where(x => x.Id == ltm.userId).SelectMany(x => x.Boards).Select(x => x.Board).Include(l => l.BoardLists).ThenInclude(c => c.Cards).ToList();
             var currentBoard = userBoards.FirstOrDefault(x => x.Id == ltm.currentBoardId);
+            var lists = currentBoard.BoardLists.OrderBy(pos=>pos.ListPosition).ToList();
             var selectedList = currentBoard.BoardLists.FirstOrDefault(x => x.Id == ltm.currentListId);
 
             if(ltm.currentBoardId != ltm.moveToBoardId)
@@ -117,12 +126,27 @@ namespace TaskOrganizerAPI.Controllers
                var moveToBoard = userBoards.FirstOrDefault(x => x.Id == ltm.moveToBoardId);
                 moveToBoard.BoardLists.Add(selectedList);
                 currentBoard.BoardLists.Remove(selectedList);
+
+                foreach (var a in currentBoard.BoardLists.Where(x => x.ListPosition > selectedList.ListPosition))
+                {
+                    a.ListPosition--;
+                }
                 foreach (var a in moveToBoard.BoardLists.Where(x => x.ListPosition >= ltm.moveToListId))
-                { a.ListPosition++; }
+                {
+                    a.ListPosition++;
+                }
             }
             else { 
-            foreach(var a in currentBoard.BoardLists.Where(x=>x.ListPosition>=ltm.moveToListId))
-            { a.ListPosition++; }
+               if(selectedList.ListPosition < ltm.moveToListId)
+                {
+                    foreach (var a in currentBoard.BoardLists.Where(x => x.ListPosition <= ltm.moveToListId && x.ListPosition > selectedList.ListPosition))
+                    { a.ListPosition--; }
+                }
+               else if(selectedList.ListPosition > ltm.moveToListId)
+                {
+                    foreach (var a in currentBoard.BoardLists.Where(x => x.ListPosition >= ltm.moveToListId && x.ListPosition < selectedList.ListPosition))
+                    { a.ListPosition++; }
+                }
             }
             selectedList.ListPosition = ltm.moveToListId;
             _dataContext.SaveChanges();
@@ -139,6 +163,48 @@ namespace TaskOrganizerAPI.Controllers
             
             _dataContext.SaveChanges();
         }
+
+        [HttpPut("MoveCard")]
+        public async Task MoveCard( [FromBody] CardToMove ctm)
+        {
+            var b = await _dataContext.Boards.Include(l => l.BoardLists).ThenInclude(c => c.Cards).FirstOrDefaultAsync(brd=>brd.Id==ctm.currentBoardId);
+            var currentList =  b.BoardLists.FirstOrDefault(x => x.Id == ctm.currentListId);
+            var selectedCard = currentList.Cards.FirstOrDefault(c => c.Id == ctm.cardId);
+
+            if (ctm.currentListId != ctm.moveToListId)
+            {
+                var moveToList = b.BoardLists.FirstOrDefault(x => x.Id == ctm.moveToListId);
+
+                moveToList.Cards.Add(selectedCard);
+                currentList.Cards.Remove(selectedCard);
+               
+                 foreach (var c in currentList.Cards.Where(x => x.CardPosition > selectedCard.CardPosition))
+                {
+                    c.CardPosition--;
+                }
+                foreach (var c in moveToList.Cards.Where(x => x.CardPosition >= ctm.moveToPosition))
+                {
+                    c.CardPosition++;
+                }
+            }
+
+            else
+            {
+                if (selectedCard.CardPosition < ctm.moveToPosition)
+                {
+                    foreach (var a in currentList.Cards.Where(x => x.CardPosition <= ctm.moveToPosition && x.CardPosition > selectedCard.CardPosition))
+                    { a.CardPosition--; }
+                }
+                else if (selectedCard.CardPosition > ctm.moveToPosition)
+                {
+                    foreach (var a in currentList.Cards.Where(x => x.CardPosition >= ctm.moveToPosition && x.CardPosition < selectedCard.CardPosition))
+                    { a.CardPosition++; }
+                }
+            }
+            selectedCard.CardPosition = ctm.moveToPosition;
+            _dataContext.SaveChanges();
+        }
+
 
         // POST api/values
         [HttpPost]
@@ -176,7 +242,6 @@ namespace TaskOrganizerAPI.Controllers
             {
                 if (listPositon <= l.ListPosition)
                     listPositon = l.ListPosition;
-                
             }
             if (board.BoardLists == null)
             {
@@ -189,12 +254,9 @@ namespace TaskOrganizerAPI.Controllers
             if(board.BoardLists.Count == 0)
             {
                 boardList.ListPosition = 1; }
-            else
-            {boardList.ListPosition = board.BoardLists.OrderByDescending(p => p.ListPosition).FirstOrDefault().ListPosition + 1;
-           
-                
+            else{
+            boardList.ListPosition = board.BoardLists.OrderByDescending(p => p.ListPosition).FirstOrDefault().ListPosition + 1;
             }
-
 
             board.BoardLists.Add(boardList);
             _dataContext.SaveChanges();
@@ -203,16 +265,29 @@ namespace TaskOrganizerAPI.Controllers
         [HttpPost("createCard")]
         public async Task CreateCard([FromBody] CardForCreate cfc)
         {
-            var board = await _dataContext.Boards.Include(x => x.BoardLists).FirstOrDefaultAsync(x => x.Id == cfc.boardId);
+            var board = await _dataContext.Boards.Include(x => x.BoardLists).ThenInclude(c=>c.Cards).FirstOrDefaultAsync(x => x.Id == cfc.boardId);
             var list =  board.BoardLists.FirstOrDefault(x => x.Id == cfc.listId);
-            var card = new Card
-            {
-                CardText = cfc.cardName
-            };
+            int cardPosition = 0;
+
             if (list.Cards == null)
             {
                 list.Cards = new List<Card>();
             }
+         
+                 foreach (var c in list.Cards)
+                 {
+                     if (cardPosition <= c.CardPosition)
+                     cardPosition= c.CardPosition;
+                 }
+        
+
+            var card = new Card
+            {
+                CardPosition = cardPosition + 1,
+                CardText = cfc.cardName
+            };
+         
+
             list.Cards.Add(card);
             _dataContext.SaveChanges();
         }
@@ -247,11 +322,6 @@ namespace TaskOrganizerAPI.Controllers
         {
             var board = await _dataContext.Boards.Include(x => x.BoardLists).ThenInclude(c => c.Cards).FirstOrDefaultAsync(i => i.Id == id);
             var cards = board.BoardLists.FirstOrDefault(x => x.Id == listId).Cards;
-           // var a = _dataContext.Boards.FirstOrDefault(i => i.Id == id).BoardLists.FirstOrDefault(x => x.Id == listId).Cards;
-           /*foreach(var c in cards)
-            {
-                cards.Remove(c);  
-            }*/
             cards.Clear();
             
             _dataContext.SaveChanges();
